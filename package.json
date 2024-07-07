@@ -27,7 +27,7 @@
         {
           "id": "connection-subjectarea",
           "title": "Informatica2Airflow",
-          "icon": "resources/squirrel.svg"
+          "icon": "resources/dark/squirrel.svg"
         }
       ]
     },
