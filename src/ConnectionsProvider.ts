@@ -49,8 +49,8 @@ export class ConnectionNode extends vscode.TreeItem {
         super(label, collapsibleState);
         this.tooltip = `${this.label}`;
         this.iconPath = {
-            light: this.context.asAbsolutePath('resources/light/connection.svg'),
-            dark: this.context.asAbsolutePath('resources/dark/connection.svg'),
+            light: this.context.asAbsolutePath('resources/light/radio-tower.svg'),
+            dark: this.context.asAbsolutePath('resources/dark/radio-tower.svg'),
         };
     }
 }

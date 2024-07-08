@@ -4,4 +4,4 @@ node_modules
 .vscode-test/
 *.vsix
 .env
-src/query.ts
+src/constants.ts

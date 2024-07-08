@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { ConnectionCreds, Connection, SupportedDatabase } from './Connection';
 import { SubjectAreaProvider, SubjectArea } from './SubjectAreaProvider';
 import { ConnectionsProvider, ConnectionView } from './ConnectionsProvider';
-import { SUB_WF } from './query';
+import { SUB_WF } from './queries';
 
 interface Folder {
 	name: string;
