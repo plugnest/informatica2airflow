@@ -20,6 +20,22 @@
           "dark": "resources/dark/add.svg",
           "light": "resources/light/add.svg"
         }
+      },
+      {
+        "title": "Generate DAG File",
+        "command": "informatica2airflow.generateDAGFile",
+        "icon": {
+          "dark": "resources/dark/code.svg",
+          "light": "resources/light/code.svg"
+        }
+      },
+      {
+        "command": "informatica2airflow.openSubjectArea",
+        "title": "Open Subject Area",
+        "icon": {
+          "dark": "resources/dark/code.svg",
+          "light": "resources/light/code.svg"
+        }
       }
     ],
     "viewsContainers": {
@@ -38,7 +54,7 @@
           "name": "Connections"
         },
         {
-          "id": "subject-areas",
+          "id": "subjectAreas",
           "name": "Subject Areas"
         }
       ]
@@ -49,6 +65,18 @@
           "command": "informatica2airflow.addconnection",
           "when": "view == connections",
           "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "informatica2airflow.generateDAGFile",
+          "group": "inline",
+          "when": "viewItem == subjectArea"
+        },
+        {
+          "command": "informatica2airflow.openSubjectArea",
+          "when": "viewItem == workflow",
+          "group": "inline"
         }
       ]
     }

@@ -29,13 +29,26 @@ export class SubjectAreaProvider implements vscode.TreeDataProvider<SubjectArea>
 
 export class SubjectArea extends vscode.TreeItem {
     children: SubjectArea[];
+    parentName?: string;
 
     constructor(
         public readonly label: string,
         public readonly collapsibleState: vscode.TreeItemCollapsibleState,
-        children?: SubjectArea[]
+        children?: SubjectArea[],
+        command?: vscode.Command,
+        contextValue?: string,
+        parentName?: string
     ) {
         super(label, collapsibleState);
         this.children = children || [];
+        if (command) {
+            this.command = command;
+        }
+        if (contextValue) {
+            this.contextValue = contextValue;
+        }
+        if (parentName) {
+            this.parentName = parentName;
+        }
     }
 }
