@@ -4,6 +4,11 @@ import { SubjectAreaProvider, SubjectArea } from './SubjectAreaProvider';
 import { ConnectionsProvider, ConnectionView } from './ConnectionsProvider';
 import { INSTANCES, INSTANCES_BAK, SUB_WF } from './queries';
 
+interface ClickedItem {
+	label: string;
+	parentName: string;
+};
+
 interface Folder {
 	name: string;
 	workflows: Workflow[];
@@ -12,6 +17,13 @@ interface Folder {
 interface Workflow {
 	name: string;
 }
+
+const taskTypeToOperator: { [key: string]: string } = {
+	"Event Wait": "DummyOperator",
+	"Start": "BashOperator",
+	"Session": "PythonOperator",
+	"Command": "BashOperator"
+};
 
 let newConnection: ConnectionView;
 
@@ -98,16 +110,11 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
-	interface ClickedItem {
-		label: string;
-		parentName: string;
-	};
-
 	const dagGenerator = vscode.commands.registerCommand('informatica2airflow.generateDAGFile', async (selectedItem: ClickedItem) => {
 		const workflowName = selectedItem.label;
 		const subjectAreaName = selectedItem.parentName;
 
-		let {username, password, connectionString} = newConnection;
+		let { username, password, connectionString } = newConnection;
 		const creds = new ConnectionCreds(username, password, connectionString);
 		const dbConnection = new Connection(SupportedDatabase.Oracle, creds);
 		let connection;
@@ -119,13 +126,6 @@ export function activate(context: vscode.ExtensionContext) {
 				subjectAreaName: subjectAreaName
 			});
 
-			const taskTypeToOperator: { [key: string]: string } = {
-				"Event Wait": "DummyOperator",
-				"Start": "BashOperator",
-				"Session": "PythonOperator",
-				"Command": "BashOperator"
-			};
-			
 			const tasks = result?.rows?.map(row => {
 				const taskTypeName = row[0] as string;
 				const taskName = row[1] as string;
