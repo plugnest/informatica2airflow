@@ -28,27 +28,19 @@
           "dark": "resources/dark/code.svg",
           "light": "resources/light/code.svg"
         }
-      },
-      {
-        "command": "informatica2airflow.openSubjectArea",
-        "title": "Open Subject Area",
-        "icon": {
-          "dark": "resources/dark/code.svg",
-          "light": "resources/light/code.svg"
-        }
       }
     ],
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "connection-subjectarea",
+          "id": "connectionAndSubjectarea",
           "title": "Informatica2Airflow",
           "icon": "resources/dark/squirrel.svg"
         }
       ]
     },
     "views": {
-      "connection-subjectarea": [
+      "connectionAndSubjectarea": [
         {
           "id": "connections",
           "name": "Connections"
@@ -71,12 +63,7 @@
         {
           "command": "informatica2airflow.generateDAGFile",
           "group": "inline",
-          "when": "viewItem == subjectArea"
-        },
-        {
-          "command": "informatica2airflow.openSubjectArea",
-          "when": "viewItem == workflow",
-          "group": "inline"
+          "when": "viewItem == workflow"
         }
       ]
     }

@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { ConnectionCreds, Connection, SupportedDatabase } from './Connection';
 import { SubjectAreaProvider, SubjectArea } from './SubjectAreaProvider';
 import { ConnectionsProvider, ConnectionView } from './ConnectionsProvider';
-import { INSTANCES, SUB_WF } from './queries';
+import { INSTANCES, INSTANCES_BAK, SUB_WF } from './queries';
 
 interface Folder {
 	name: string;
@@ -21,10 +21,6 @@ export function activate(context: vscode.ExtensionContext) {
 
 	vscode.window.registerTreeDataProvider('subjectAreas', subjectAreaProvider);
 	vscode.window.registerTreeDataProvider('connections', connectionsProvider);
-
-	const dagGenerator = vscode.commands.registerCommand('informatica2airflow.generateDAGFile', async () => {
-		console.log("HELLO");
-	});
 
 	const connectionAdder = vscode.commands.registerCommand('informatica2airflow.addconnection', async () => {
 		const username = await vscode.window.showInputBox({
@@ -83,7 +79,7 @@ export function activate(context: vscode.ExtensionContext) {
 				const folder = folders[folderName];
 				const workflows = folder.workflows.map(workflow =>
 					new SubjectArea(workflow.name, vscode.TreeItemCollapsibleState.None, [], {
-						command: 'informatica2airflow.openSubjectArea',
+						command: 'informatica2airflow.generateDAGFile',
 						title: 'Open',
 						arguments: [folder.name, workflow.name]
 					}, 'workflow', folder.name)
@@ -107,7 +103,7 @@ export function activate(context: vscode.ExtensionContext) {
 		parentName: string;
 	};
 
-	const openSubjectArea = vscode.commands.registerCommand('informatica2airflow.openSubjectArea', async (selectedItem: ClickedItem) => {
+	const dagGenerator = vscode.commands.registerCommand('informatica2airflow.generateDAGFile', async (selectedItem: ClickedItem) => {
 		const workflowName = selectedItem.label;
 		const subjectAreaName = selectedItem.parentName;
 
@@ -118,7 +114,6 @@ export function activate(context: vscode.ExtensionContext) {
 		try {
 			connection = await dbConnection.getConnection();
 
-			console.log(INSTANCES);
 			const result = await connection.execute<any>(INSTANCES, {
 				workflowName: workflowName,
 				subjectAreaName: subjectAreaName
@@ -144,7 +139,6 @@ export function activate(context: vscode.ExtensionContext) {
 			}).filter(task => task !== null);
 
 			const dagCode = generateDAGCode(tasks as { taskName: string, operator: string }[]);
-			console.log(dagCode);
 
 			const document = await vscode.workspace.openTextDocument({
 				content: dagCode,
@@ -161,7 +155,7 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
-	context.subscriptions.push(connectionAdder, dagGenerator, openSubjectArea);
+	context.subscriptions.push(connectionAdder, dagGenerator);
 }
 
 function generateDAGCode(tasks: { taskName: string, operator: string }[]): string {
@@ -198,9 +192,9 @@ ${task.taskName.replace(/\s+/g, '_').toLowerCase()} = ${task.operator}(
 `;
 	}).join('\n');
 
-	const taskDependencies = tasks.map(task => task.taskName.replace(/\s+/g, '_').toLowerCase()).join(' >> ');
+	// const taskDependencies = tasks.map(task => task.taskName.replace(/\s+/g, '_').toLowerCase()).join(' >> ');
 
-	return dagTemplate + taskDefinitions + '\n' + taskDependencies + '\n';
+	return dagTemplate + taskDefinitions + '\n'; // + taskDependencies + '\n';
 }
 
 
