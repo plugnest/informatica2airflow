@@ -28,6 +28,14 @@
           "dark": "resources/dark/code.svg",
           "light": "resources/light/code.svg"
         }
+      },
+      {
+        "command": "informatica2airflow.openConnection",
+        "title": "Get Subject Areas",
+        "icon": {
+          "dark": "resources/dark/git-pull-request.svg",
+          "light": "resources/light/git-pull-request.svg"
+        }
       }
     ],
     "viewsContainers": {
@@ -64,6 +72,11 @@
           "command": "informatica2airflow.generateDAGFile",
           "group": "inline",
           "when": "viewItem == workflow"
+        },
+        {
+          "command": "informatica2airflow.openConnection",
+          "when": "view == connections && viewItem == connectionNode",
+          "group": "inline"
         }
       ]
     }
@@ -94,7 +107,9 @@
     "webpack-cli": "^5.1.4"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.14.1",
     "@types/oracledb": "^6.5.1",
+    "dotenv": "^16.4.5",
     "oracledb": "^6.5.1"
   }
 }

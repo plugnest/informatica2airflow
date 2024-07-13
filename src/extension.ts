@@ -1,8 +1,18 @@
+import * as dotenv from 'dotenv';
 import * as vscode from 'vscode';
 import { ConnectionCreds, Connection, SupportedDatabase } from './Connection';
 import { SubjectAreaProvider, SubjectArea } from './SubjectAreaProvider';
-import { ConnectionsProvider, ConnectionView } from './ConnectionsProvider';
+import { ConnectionNode, ConnectionsProvider, ConnectionView } from './ConnectionsProvider';
 import { INSTANCES, INSTANCES_BAK, SUB_WF } from './queries';
+import path from 'path';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+
+const envPath = path.resolve(__dirname, '../.env');
+dotenv.config({ path: envPath });
+
+const genAI = new GoogleGenerativeAI(process.env.API_KEY as string);
+
+const model = genAI.getGenerativeModel({ model: process.env.MODEL as string });
 
 interface ClickedItem {
 	label: string;
@@ -140,6 +150,15 @@ export function activate(context: vscode.ExtensionContext) {
 
 			const dagCode = generateDAGCode(tasks as { taskName: string, operator: string }[]);
 
+			// let aiGenerated = await generateDAGCodeWithAI("add the dependency flow here, please give the python code only for .py file, please don't include any explanation or suggestions, just the content of the python file: " + dagCode);
+			// aiGenerated = aiGenerated.split('\n').slice(1, -1).join('\n');
+
+			// const aiGeneratedDocument = await vscode.workspace.openTextDocument({
+			// 	content: aiGenerated,
+			// 	language: 'python'
+			// });
+			// await vscode.window.showTextDocument(aiGeneratedDocument);
+
 			const document = await vscode.workspace.openTextDocument({
 				content: dagCode,
 				language: 'python'
@@ -155,7 +174,55 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
-	context.subscriptions.push(connectionAdder, dagGenerator);
+	const openConnection = vscode.commands.registerCommand('informatica2airflow.openConnection', async (connectionView: ConnectionNode) => {
+		// vscode.window.showInformationMessage(`Opening connection for ${connectionView.connection.username}@${connectionView.connection.connectionString}`);
+		const { username, password, connectionString } = connectionView.connection;
+		newConnection = new ConnectionView(username, password, connectionString);
+		const creds = new ConnectionCreds(username, password, connectionString);
+		const dbConnection = new Connection(SupportedDatabase.Oracle, creds);
+
+		let connection;
+		try {
+			connection = await dbConnection.getConnection();
+
+			const result = await connection.execute<any>(SUB_WF);
+
+			const folders: { [folderName: string]: Folder } = {};
+
+			result?.rows?.forEach(row => {
+				const folderName = row[0];
+				const workflowName = row[1];
+
+				if (!folders[folderName]) {
+					folders[folderName] = { name: folderName, workflows: [] };
+				}
+
+				folders[folderName].workflows.push({ name: workflowName });
+			});
+
+			const subjectAreas = Object.keys(folders).map(folderName => {
+				const folder = folders[folderName];
+				const workflows = folder.workflows.map(workflow =>
+					new SubjectArea(workflow.name, vscode.TreeItemCollapsibleState.None, [], {
+						command: 'informatica2airflow.generateDAGFile',
+						title: 'Open',
+						arguments: [folder.name, workflow.name]
+					}, 'workflow', folder.name)
+				);
+				return new SubjectArea(folder.name, vscode.TreeItemCollapsibleState.Collapsed, workflows);
+			});
+
+			subjectAreaProvider.subjectAreas = subjectAreas;
+			subjectAreaProvider.refresh();
+		} catch (err) {
+			console.error(err);
+		} finally {
+			if (connection) {
+				await dbConnection.closeConnection(connection);
+			}
+		}
+	});
+	context.subscriptions.push(connectionAdder, dagGenerator, openConnection);
 }
 
 function generateDAGCode(tasks: { taskName: string, operator: string }[]): string {
@@ -197,5 +264,12 @@ ${task.taskName.replace(/\s+/g, '_').toLowerCase()} = ${task.operator}(
 	return dagTemplate + taskDefinitions + '\n'; // + taskDependencies + '\n';
 }
 
+async function generateDAGCodeWithAI(prompt: string) {
+	const result = await model.generateContent(prompt);
+	const response = await result.response;
+	const text = response.text();
+	console.log(text);
+	return text;
+}
 
 export function deactivate() { }

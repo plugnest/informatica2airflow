@@ -10,7 +10,9 @@ export class ConnectionsProvider implements vscode.TreeDataProvider<ConnectionNo
 
     private connections: ConnectionNode[] = [];
 
-    constructor(private readonly context: vscode.ExtensionContext) {}
+    constructor(private readonly context: vscode.ExtensionContext) {
+        this.loadConnections();
+    }
 
     refresh(): void {
         this._onDidChangeTreeData.fire(undefined);
@@ -35,7 +37,24 @@ export class ConnectionsProvider implements vscode.TreeDataProvider<ConnectionNo
             this.context
         );
         this.connections.push(connectionNode);
+        this.saveConnections();
         this.refresh();
+    }
+    private loadConnections(): void {
+        const storedConnections = this.context.globalState.get<string>('connections');
+        if (storedConnections) {
+            const parsedConnections: ConnectionView[] = JSON.parse(storedConnections);
+            this.connections = parsedConnections.map(connection => new ConnectionNode(
+                `${connection.username}@${connection.connectionString}`,
+                vscode.TreeItemCollapsibleState.None,
+                connection,
+                this.context
+            ));
+        }
+    }
+    private saveConnections(): void {
+        const connectionViews = this.connections.map(node => node.connection);
+        this.context.globalState.update('connections', JSON.stringify(connectionViews));
     }
 }
 
@@ -52,5 +71,11 @@ export class ConnectionNode extends vscode.TreeItem {
             light: this.context.asAbsolutePath('resources/light/radio-tower.svg'),
             dark: this.context.asAbsolutePath('resources/dark/radio-tower.svg'),
         };
+        this.contextValue = 'connectionNode';
+        // this.command = {
+        //     command: 'informatica2airflow.openConnection',
+        //     title: 'Get Subject Areas for this Connection',
+        //     arguments: [this.connection]
+        // };
     }
 }
