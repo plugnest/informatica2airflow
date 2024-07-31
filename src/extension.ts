@@ -157,7 +157,7 @@ export function activate(context: vscode.ExtensionContext) {
       try {
         connection = await dbConnection.getConnection();
 
-        const result = await connection.execute<any>(INSTANCES, {
+        const result = await connection.execute<any>(INSTANCES_BAK, {
           workflowName: workflowName,
           subjectAreaName: subjectAreaName,
         });
