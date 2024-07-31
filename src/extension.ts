@@ -7,7 +7,7 @@ import {
   ConnectionsProvider,
   ConnectionView,
 } from "./ConnectionsProvider";
-import { COMMANDS, INSTANCES, INSTANCES_BAK, SUB_WF } from "./queries";
+import { COMMANDS, EVENT_WAIT_FILE, INSTANCES, INSTANCES_BAK, SUB_WF } from "./queries";
 import path from "path";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
@@ -295,6 +295,7 @@ async function generateDAGCode(
 ): Promise<string> {
   const dagTemplate = `import pendulum
 from airflow.decorators import dag, task
+from airflow.sensors.filesystem import FileSensor
 from banglalink.airflow.callbacks import on_failure_callback, on_success_callback
 
 default_args = {
@@ -322,31 +323,59 @@ def ${tasks[0].workflowName.toLowerCase()}():
 
   const taskDefinitions = await Promise.all(
     tasks.map(async (task) => {
+      console.log(task);
       let definition = "";
       switch (task.taskTypeName) {
+        case "Start":
+          definition = 
+`    @task
+	def ${task.taskName.replace(/\s+/g, "_").toLowerCase()}():
+      print("Started")
+`;
+          break;
+        case "Event Wait":
+          const fileName = await getEventWaitFileName(
+            task.workflowName,
+            task.taskName,
+            task.subjectAreaName
+          );
+          definition = 
+`    sensor_${task.taskName.replace(/\s+/g, "_").replace('EventWait_', '').toLowerCase()} = FileSensor(
+        task_id='${"sensor_" + task.taskName.replace(/\s+/g, "_").replace('EventWait_', '').toLowerCase()}',
+        filepath='${fileName[0]}',
+        poke_interval=60,
+        timeout=7200,
+        mode='poke',      
+        soft_fail=False
+    )
+`;
+          break;
         case "Command":
           const commandsInfo = await getCommands(
             task.workflowName,
             task.taskName,
             task.subjectAreaName
           );
-          const commands = commandsInfo.map((command: any) => command[0]);
-          definition = `
-	@task.bash
-	def ${task.taskName.replace(/\s+/g, "_").toLowerCase()}():
-		return """
+          const commands = commandsInfo.map((command: Array<String>) => command[0]);
+          const singleFormat = 
+`    return "${commands[0]}"`;
+          const multiFormat = 
+`    return """
 			${commands.join(" && \\\n\t\t\t")}
-		"""
-          `;
+		"""`;
+          definition = 
+`    @task.bash
+	def ${task.taskName.replace(/\s+/g, "_").toLowerCase()}():
+    ${commands.length === 1 ? singleFormat : multiFormat}
+`;
           break;
         default:
-          definition = `
-	${task.taskName.replace(/\s+/g, "_").toLowerCase()} = ${task.operator}(
+          definition = 
+`    ${task.taskName.replace(/\s+/g, "_").toLowerCase()} = ${task.operator}(
 		task_id='${task.taskName.replace(/\s+/g, "_").toLowerCase()}',
-		dag=dag,
 		# Add operator-specific arguments here
 	)
-          `;
+`;
           break;
       }
       return definition;
@@ -355,7 +384,7 @@ def ${tasks[0].workflowName.toLowerCase()}():
   // const taskDependencies = tasks.map(task => task.taskName.replace(/\s+/g, '_').toLowerCase()).join(' >> ');
 
   //   return dagTemplate + taskDefinitions + "\n"; // + taskDependencies + '\n';
-  return dagTemplate + taskDefinitions.join("\n") + "\n"; // + taskDependencies + '\n';
+  return dagTemplate + taskDefinitions.join("\n") + "\n" + tasks[0].workflowName.toLowerCase() + '()'; // + taskDependencies + '\n';
 }
 
 async function generateDAGCodeWithAI(prompt: string) {
@@ -365,6 +394,36 @@ async function generateDAGCodeWithAI(prompt: string) {
   console.log(text);
   return text;
 }
+
+const getEventWaitFileName = async (
+  workflowName: string,
+  taskName: string,
+  subjectAreaName: string
+): Promise<any> => {
+  let { username, password, connectionString } = newConnection;
+  const creds = new ConnectionCreds(username, password, connectionString);
+  const dbConnection = new Connection(SupportedDatabase.Oracle, creds);
+  let connection;
+  try {
+    connection = await dbConnection.getConnection();
+
+    const result = await connection.execute<any>(EVENT_WAIT_FILE, {
+      workflowName: workflowName,
+      taskName: taskName,
+      subjectAreaName: subjectAreaName,
+    });
+
+    console.log(result);
+    return result?.rows || [];
+  } catch (err) {
+    console.error(err);
+    vscode.window.showErrorMessage("Error executing query");
+  } finally {
+    if (connection) {
+      await dbConnection.closeConnection(connection);
+    }
+  }
+};
 
 const getCommands = async (
   workflowName: string,
