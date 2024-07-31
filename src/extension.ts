@@ -329,8 +329,8 @@ def ${tasks[0].workflowName.toLowerCase()}():
         case "Start":
           definition = 
 `    @task
-	def ${task.taskName.replace(/\s+/g, "_").toLowerCase()}():
-      print("Started")
+    def ${task.taskName.replace(/\s+/g, "_").toLowerCase()}():
+        print("Started")
 `;
           break;
         case "Event Wait":
@@ -345,7 +345,7 @@ def ${tasks[0].workflowName.toLowerCase()}():
         filepath='${fileName[0]}',
         poke_interval=60,
         timeout=7200,
-        mode='poke',      
+        mode='poke',
         soft_fail=False
     )
 `;
@@ -356,36 +356,31 @@ def ${tasks[0].workflowName.toLowerCase()}():
             task.taskName,
             task.subjectAreaName
           );
-          const commands = commandsInfo.map((command: Array<String>) => command[0]);
-          const singleFormat = 
-`    return "${commands[0]}"`;
-          const multiFormat = 
-`    return """
-			${commands.join(" && \\\n\t\t\t")}
-		"""`;
+          const commands = commandsInfo.map((command: Array<string>) => command[0]);
+          const singleFormat = `return "${commands[0]}"`;
+          const multiFormat = `return """${commands.join(" && \\\n\t\t\t")}"""`;
           definition = 
 `    @task.bash
-	def ${task.taskName.replace(/\s+/g, "_").toLowerCase()}():
-    ${commands.length === 1 ? singleFormat : multiFormat}
+    def ${task.taskName.replace(/\s+/g, "_").toLowerCase()}():
+        ${commands.length === 1 ? singleFormat : multiFormat}
 `;
           break;
         default:
           definition = 
 `    ${task.taskName.replace(/\s+/g, "_").toLowerCase()} = ${task.operator}(
-		task_id='${task.taskName.replace(/\s+/g, "_").toLowerCase()}',
-		# Add operator-specific arguments here
-	)
+        task_id='${task.taskName.replace(/\s+/g, "_").toLowerCase()}',
+        # Add operator-specific arguments here
+    )
 `;
           break;
       }
       return definition;
     })
   );
-  // const taskDependencies = tasks.map(task => task.taskName.replace(/\s+/g, '_').toLowerCase()).join(' >> ');
 
-  //   return dagTemplate + taskDefinitions + "\n"; // + taskDependencies + '\n';
-  return dagTemplate + taskDefinitions.join("\n") + "\n" + tasks[0].workflowName.toLowerCase() + '()'; // + taskDependencies + '\n';
+  return dagTemplate + taskDefinitions.join("\n") + "\n" + tasks[0].workflowName.toLowerCase() + '()';
 }
+
 
 async function generateDAGCodeWithAI(prompt: string) {
   const result = await model.generateContent(prompt);
