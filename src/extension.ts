@@ -291,7 +291,6 @@ export function activate(context: vscode.ExtensionContext) {
   );
   context.subscriptions.push(connectionAdder, dagGenerator, openConnection);
 }
-
 const generateDAGCodeFromTasks = async (
   tasks: TaskNode[],
   workflowName: string,
@@ -325,99 +324,98 @@ const generateDAGCodeFromTasks = async (
   );
 
   const processed: Map<string, boolean> = new Map();
-  await Promise.all(
-    tasks.map(async (task) => {
-      if (processed.get(task.toInstName)) {
-        builder.addDependency(
-          task.fromInstName.toLocaleLowerCase(),
-          task.toInstName.toLocaleLowerCase()
+
+  for (const task of tasks) {
+    if (processed.get(task.toInstName)) {
+      builder.addDependency(
+        task.fromInstName.toLocaleLowerCase(),
+        task.toInstName.toLocaleLowerCase()
+      );
+      continue;
+    }
+    processed.set(task.toInstName, true);
+
+    switch (task.toInstTaskTypeName.toLocaleLowerCase()) {
+      case "event wait":
+        const fileName = await getEventWaitFileName(
+          workflowName,
+          task.toInstName,
+          subjectAreaName
         );
-        return;
-      }
-      processed.set(task.toInstName, true);
-      switch (task.toInstTaskTypeName.toLocaleLowerCase()) {
-        case "event wait":
-          const fileName = await getEventWaitFileName(
-            workflowName,
-            task.toInstName,
-            subjectAreaName
+        builder
+          .addImport("from airflow.sensors.filesystem import FileSensor")
+          .addTask(
+            task.toInstName.toLocaleLowerCase(),
+            task.toInstTaskTypeName.toLocaleLowerCase(),
+            "",
+            "",
+            fileName
+          )
+          .addDependency(
+            task.fromInstName.toLocaleLowerCase(),
+            task.toInstName.toLocaleLowerCase()
           );
-          builder
-            .addImport("from airflow.sensors.filesystem import FileSensor")
-            .addTask(
-              task.toInstName.toLocaleLowerCase(),
-              task.toInstTaskTypeName.toLocaleLowerCase(),
-              "",
-              "",
-              fileName
-            )
-            .addDependency(
-              task.fromInstName.toLocaleLowerCase(),
-              task.toInstName.toLocaleLowerCase()
-            );
-          break;
-        case "command":
-          const commandsInfo = await getCommands(
-            workflowName,
-            task.toInstName,
-            subjectAreaName
+        break;
+      case "command":
+        const commandsInfo = await getCommands(
+          workflowName,
+          task.toInstName,
+          subjectAreaName
+        );
+        const commands = commandsInfo.map(
+          (command: Array<string>) => command[0]
+        );
+        builder
+          .addTask(
+            task.toInstName.toLocaleLowerCase(),
+            task.toInstTaskTypeName.toLocaleLowerCase(),
+            "",
+            `${commands.join(" && \\\n\t\t\t")}`
+          )
+          .addDependency(
+            task.fromInstName.toLocaleLowerCase(),
+            task.toInstName.toLocaleLowerCase()
           );
-          const commands = commandsInfo.map(
-            (command: Array<string>) => command[0]
+        break;
+      case "decision":
+        builder
+          .addTask(
+            task.toInstName.toLocaleLowerCase(),
+            task.toInstTaskTypeName.toLocaleLowerCase(),
+            "",
+            "",
+            "",
+            `${task.condition}`,
+            "",
+            "",
+            ""
+          )
+          .addDependency(
+            task.fromInstName.toLocaleLowerCase(),
+            task.toInstName.toLocaleLowerCase()
           );
-          builder
-            .addTask(
-              task.toInstName.toLocaleLowerCase(),
-              task.toInstTaskTypeName.toLocaleLowerCase(),
-              "",
-              `${commands.join(" && \\\n\t\t\t")}`
-            )
-            .addDependency(
-              task.fromInstName.toLocaleLowerCase(),
-              task.toInstName.toLocaleLowerCase()
-            );
-          break;
-        case "decision":
-          builder
-            .addTask(
-              task.toInstName.toLocaleLowerCase(),
-              task.toInstTaskTypeName.toLocaleLowerCase(),
-              "",
-              "",
-              "",
-              `${task.condition}`,
-              "",
-              "",
-              ""
-            )
-            .addDependency(
-              task.fromInstName.toLocaleLowerCase(),
-              task.toInstName.toLocaleLowerCase()
-            );
-          break;
-        default:
-          builder
-            .addImport("from airflow.operators.empty import EmptyOperator")
-            .addTask(
-              task.toInstName.toLocaleLowerCase(),
-              task.toInstTaskTypeName.toLocaleLowerCase(),
-              "",
-              "",
-              "",
-              "",
-              "",
-              "",
-              "EmptyOperator"
-            )
-            .addDependency(
-              task.fromInstName.toLocaleLowerCase(),
-              task.toInstName.toLocaleLowerCase()
-            );
-          break;
-      }
-      return;
-    })
-  );
+        break;
+      default:
+        builder
+          .addImport("from airflow.operators.empty import EmptyOperator")
+          .addTask(
+            task.toInstName.toLocaleLowerCase(),
+            task.toInstTaskTypeName.toLocaleLowerCase(),
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "EmptyOperator"
+          )
+          .addDependency(
+            task.fromInstName.toLocaleLowerCase(),
+            task.toInstName.toLocaleLowerCase()
+          );
+        break;
+    }
+  }
 
   return builder.build();
 };
