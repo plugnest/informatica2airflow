@@ -297,7 +297,7 @@ const generateDAGCodeFromTasks = async (
   subjectAreaName: string
 ) => {
   let builder = new DAGBuilder()
-    .setDagId("recharge_dag")
+    .setDagId(workflowName.toLocaleLowerCase())
     .setDefaultArgs({
       owner: "",
       email: [`${process.env.EMAIL_ADDRESS}`],
