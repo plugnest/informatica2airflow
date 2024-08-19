@@ -32,7 +32,6 @@ export class DAGBuilder {
   constructor() {
     this.addImport("import pendulum");
     this.addImport("from airflow.decorators import dag, task");
-    this.addImport("from airflow.sensors.filesystem import FileSensor");
   }
 
   setDagId(dagId: string): this {

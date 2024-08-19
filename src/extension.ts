@@ -343,6 +343,7 @@ const generateDAGCodeFromTasks = async (
             subjectAreaName
           );
           builder
+            .addImport("from airflow.sensors.filesystem import FileSensor")
             .addTask(
               task.toInstName.toLocaleLowerCase(),
               task.toInstTaskTypeName.toLocaleLowerCase(),
@@ -378,7 +379,6 @@ const generateDAGCodeFromTasks = async (
           break;
         case "decision":
           builder
-            .addImport("from airflow.operators.empty import EmptyOperator")
             .addTask(
               task.toInstName.toLocaleLowerCase(),
               task.toInstTaskTypeName.toLocaleLowerCase(),
@@ -388,7 +388,7 @@ const generateDAGCodeFromTasks = async (
               `${task.condition}`,
               "",
               "",
-              "EmptyOperator"
+              ""
             )
             .addDependency(
               task.fromInstName.toLocaleLowerCase(),
