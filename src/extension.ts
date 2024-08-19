@@ -7,9 +7,18 @@ import {
   ConnectionsProvider,
   ConnectionView,
 } from "./ConnectionsProvider";
-import { COMMANDS, EVENT_WAIT_FILE, INSTANCES, INSTANCES_BAK, SUB_WF } from "./queries";
+import {
+  COMMANDS,
+  EVENT_WAIT_FILE,
+  INSTANCES,
+  INSTANCES_BAK,
+  SUB_WF,
+  WORKFLOW_SESSION_INSTANCES,
+} from "./queries";
 import path from "path";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { TaskNode, topoSort } from "./sorter";
+import { DAGBuilder } from "./dag_builder";
 
 const envPath = path.resolve(__dirname, "../.env");
 dotenv.config({ path: envPath });
@@ -157,49 +166,48 @@ export function activate(context: vscode.ExtensionContext) {
       try {
         connection = await dbConnection.getConnection();
 
-        const result = await connection.execute<any>(INSTANCES_BAK, {
-          workflowName: workflowName,
-          subjectAreaName: subjectAreaName,
-        });
-
-        const tasks = result?.rows
-          ?.map((row) => {
-            const taskTypeName = row[0] as string;
-            const taskName = row[1] as string;
-            const operator = taskTypeToOperator[taskTypeName];
-            if (operator) {
-              return {
-                taskName,
-                operator,
-                taskTypeName,
-                workflowName,
-                subjectAreaName,
-              };
-            } else {
-              console.warn(`No operator found for task type: ${taskTypeName}`);
-              return null;
-            }
-          })
-          .filter((task) => task !== null);
-
-        const dagCode = await generateDAGCode(
-          tasks as {
-            taskName: string;
-            operator: string;
-            taskTypeName: string;
-            workflowName: string;
-            subjectAreaName: string;
-          }[]
+        const result = await connection.execute<any>(
+          WORKFLOW_SESSION_INSTANCES,
+          {
+            workflowName: workflowName,
+            subjectAreaName: subjectAreaName,
+          }
         );
 
-        // let aiGenerated = await generateDAGCodeWithAI("add the dependency flow here, please give the python code only for .py file, please don't include any explanation or suggestions, just the content of the python file: " + dagCode);
-        // aiGenerated = aiGenerated.split('\n').slice(1, -1).join('\n');
+        const taskNodes: undefined | TaskNode[] = result.rows?.map((row) => ({
+          fromInstId: row[0],
+          toInstId: row[1],
+          conditionId: row[2],
+          condition: row[3],
+          fromTaskId: row[4],
+          fromInstName: row[5],
+          fromInstTaskType: row[6],
+          fromInstTaskTypeName: row[7],
+          toTaskId: row[8],
+          toInstName: row[9],
+          toInstTaskType: row[10],
+          toInstTaskTypeName: row[11],
+        }));
 
-        // const aiGeneratedDocument = await vscode.workspace.openTextDocument({
-        // 	content: aiGenerated,
-        // 	language: 'python'
-        // });
-        // await vscode.window.showTextDocument(aiGeneratedDocument);
+        if (taskNodes === undefined) {
+          // TODO: Try to use the query from task inst run
+          return;
+        }
+        const sortedTasks = topoSort(taskNodes as TaskNode[]);
+
+        if (typeof sortedTasks === "string") {
+          console.error(sortedTasks);
+          return;
+          // TODO: Try to use the query from task inst run
+        } else {
+          console.log("Sorted tasks:", sortedTasks);
+        }
+
+        const dagCode = await generateDAGCodeFromTasks(
+          sortedTasks,
+          workflowName,
+          subjectAreaName
+        );
 
         const document = await vscode.workspace.openTextDocument({
           content: dagCode,
@@ -284,111 +292,135 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(connectionAdder, dagGenerator, openConnection);
 }
 
-async function generateDAGCode(
-  tasks: {
-    taskName: string;
-    operator: string;
-    taskTypeName: string;
-    workflowName: string;
-    subjectAreaName: string;
-  }[]
-): Promise<string> {
-  const dagTemplate = `import pendulum
-from airflow.decorators import dag, task
-from airflow.sensors.filesystem import FileSensor
-from banglalink.airflow.callbacks import on_failure_callback, on_success_callback
-
-default_args = {
-    "owner": '',
-    "email": [""],
-    "email_on_failure": False,
-    "email_on_retry": False,
-}
-
-@dag(
-    default_args=default_args,
-    schedule=None,
-    start_date=pendulum.today('Asia/Dhaka').add(days=0),
-    tags=['recharge'],
-    on_failure_callback=on_failure_callback,
-    on_success_callback=on_success_callback,
-    params={
-        "date_value": pendulum.today('Asia/Dhaka').add(days=0).strftime('%Y-%m-%d')
-    },
-    max_active_runs=1,
-    catchup=False,
-)
-def ${tasks[0].workflowName.toLowerCase()}():
-`;
-
-  const taskDefinitions = await Promise.all(
-    tasks.map(async (task) => {
-      console.log(task);
-      let definition = "";
-      switch (task.taskTypeName) {
-        case "Start":
-          definition = 
-`    @task
-    def ${task.taskName.replace(/\s+/g, "_").toLowerCase()}():
-        print("Started")
-`;
-          break;
-        case "Event Wait":
-          const fileName = await getEventWaitFileName(
-            task.workflowName,
-            task.taskName,
-            task.subjectAreaName
-          );
-          definition = 
-`    sensor_${task.taskName.replace(/\s+/g, "_").replace('EventWait_', '').toLowerCase()} = FileSensor(
-        task_id='${"sensor_" + task.taskName.replace(/\s+/g, "_").replace('EventWait_', '').toLowerCase()}',
-        filepath='${fileName[0]}',
-        poke_interval=60,
-        timeout=7200,
-        mode='poke',
-        soft_fail=False
+const generateDAGCodeFromTasks = async (
+  tasks: TaskNode[],
+  workflowName: string,
+  subjectAreaName: string
+) => {
+  let builder = new DAGBuilder()
+    .setDagId("recharge_dag")
+    .setDefaultArgs({
+      owner: "",
+      email: [`${process.env.EMAIL_ADDRESS}`],
+      email_on_failure: "False",
+      email_on_retry: "False",
+    })
+    .addTag(workflowName.split("_")[1])
+    .addImport(
+      "from banglalink.airflow.callbacks import on_failure_callback, on_success_callback"
     )
-`;
-          break;
-        case "Command":
-          const commandsInfo = await getCommands(
-            task.workflowName,
-            task.taskName,
-            task.subjectAreaName
+    .setCallbacks("on_success_callback", "on_failure_callback")
+    .setMaxActiveRuns(1)
+    .setCatchup("False")
+    .setParams({
+      date_value:
+        "pendulum.today('Asia/Dhaka').add(days=0).strftime('%Y-%m-%d')",
+    });
+
+  const start = tasks[0]!;
+  builder.addTask(
+    start.fromInstName.toLocaleLowerCase(),
+    start.fromInstTaskTypeName.toLocaleLowerCase(),
+    "print('Started')"
+  );
+
+  const processed: Map<string, boolean> = new Map();
+  await Promise.all(
+    tasks.map(async (task) => {
+      if (processed.get(task.toInstName)) {
+        builder.addDependency(
+          task.fromInstName.toLocaleLowerCase(),
+          task.toInstName.toLocaleLowerCase()
+        );
+        return;
+      }
+      processed.set(task.toInstName, true);
+      switch (task.toInstTaskTypeName.toLocaleLowerCase()) {
+        case "event wait":
+          const fileName = await getEventWaitFileName(
+            workflowName,
+            task.toInstName,
+            subjectAreaName
           );
-          const commands = commandsInfo.map((command: Array<string>) => command[0]);
-          const singleFormat = `return "${commands[0]}"`;
-          const multiFormat = `return """${commands.join(" && \\\n\t\t\t")}"""`;
-          definition = 
-`    @task.bash
-    def ${task.taskName.replace(/\s+/g, "_").toLowerCase()}():
-        ${commands.length === 1 ? singleFormat : multiFormat}
-`;
+          builder
+            .addTask(
+              task.toInstName.toLocaleLowerCase(),
+              task.toInstTaskTypeName.toLocaleLowerCase(),
+              "",
+              "",
+              fileName
+            )
+            .addDependency(
+              task.fromInstName.toLocaleLowerCase(),
+              task.toInstName.toLocaleLowerCase()
+            );
+          break;
+        case "command":
+          const commandsInfo = await getCommands(
+            workflowName,
+            task.toInstName,
+            subjectAreaName
+          );
+          const commands = commandsInfo.map(
+            (command: Array<string>) => command[0]
+          );
+          builder
+            .addTask(
+              task.toInstName.toLocaleLowerCase(),
+              task.toInstTaskTypeName.toLocaleLowerCase(),
+              "",
+              `${commands.join(" && \\\n\t\t\t")}`
+            )
+            .addDependency(
+              task.fromInstName.toLocaleLowerCase(),
+              task.toInstName.toLocaleLowerCase()
+            );
+          break;
+        case "decision":
+          builder
+            .addImport("from airflow.operators.empty import EmptyOperator")
+            .addTask(
+              task.toInstName.toLocaleLowerCase(),
+              task.toInstTaskTypeName.toLocaleLowerCase(),
+              "",
+              "",
+              "",
+              `${task.condition}`,
+              "",
+              "",
+              "EmptyOperator"
+            )
+            .addDependency(
+              task.fromInstName.toLocaleLowerCase(),
+              task.toInstName.toLocaleLowerCase()
+            );
           break;
         default:
-          definition = 
-`    ${task.taskName.replace(/\s+/g, "_").toLowerCase()} = ${task.operator}(
-        task_id='${task.taskName.replace(/\s+/g, "_").toLowerCase()}',
-        # Add operator-specific arguments here
-    )
-`;
+          builder
+            .addImport("from airflow.operators.empty import EmptyOperator")
+            .addTask(
+              task.toInstName.toLocaleLowerCase(),
+              task.toInstTaskTypeName.toLocaleLowerCase(),
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "EmptyOperator"
+            )
+            .addDependency(
+              task.fromInstName.toLocaleLowerCase(),
+              task.toInstName.toLocaleLowerCase()
+            );
           break;
       }
-      return definition;
+      return;
     })
   );
 
-  return dagTemplate + taskDefinitions.join("\n") + "\n" + tasks[0].workflowName.toLowerCase() + '()';
-}
-
-
-async function generateDAGCodeWithAI(prompt: string) {
-  const result = await model.generateContent(prompt);
-  const response = await result.response;
-  const text = response.text();
-  console.log(text);
-  return text;
-}
+  return builder.build();
+};
 
 const getEventWaitFileName = async (
   workflowName: string,
@@ -449,4 +481,13 @@ const getCommands = async (
     }
   }
 };
+
+async function FormatDependenciesByAI(prompt: string) {
+  const result = await model.generateContent(prompt);
+  const response = await result.response;
+  const text = response.text();
+  console.log(text);
+  return text;
+}
+
 export function deactivate() {}
