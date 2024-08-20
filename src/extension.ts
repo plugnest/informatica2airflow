@@ -41,13 +41,6 @@ interface Workflow {
   name: string;
 }
 
-const taskTypeToOperator: { [key: string]: string } = {
-  "Event Wait": "DummyOperator",
-  Start: "BashOperator",
-  Session: "PythonOperator",
-  Command: "BashOperator",
-};
-
 let newConnection: ConnectionView;
 
 export function activate(context: vscode.ExtensionContext) {
@@ -187,6 +180,10 @@ export function activate(context: vscode.ExtensionContext) {
           toInstName: row[9],
           toInstTaskType: row[10],
           toInstTaskTypeName: row[11],
+          fromInstMappingName: row[12],
+          fromInstMappingId: row[13],
+          toInstMappingId: row[14],
+          toInstMappingName: row[15],
         }));
 
         if (taskNodes === undefined) {

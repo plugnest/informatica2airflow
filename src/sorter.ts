@@ -11,6 +11,10 @@ export interface TaskNode {
   toInstName: string;
   toInstTaskType: number;
   toInstTaskTypeName: string;
+  fromInstMappingId: number;
+  fromInstMappingName: number;
+  toInstMappingId: number;
+  toInstMappingName: number;
 }
 
 export function topoSort(tasks: TaskNode[]): TaskNode[] | string {

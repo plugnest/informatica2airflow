@@ -1,40 +1,155 @@
 import { DATABASE } from "./constants";
 
-export const WORKFLOW_SESSION_INSTANCES = `WITH LatestTaskVersion AS (
-SELECT
-	INSTANCE_ID,
-	WORKFLOW_ID,
-	MAX(VERSION_NUMBER) AS LATEST_VERSION
-FROM
-	${DATABASE}.OPB_TASK_INST
-GROUP BY
-	INSTANCE_ID,
-	WORKFLOW_ID
-),
+export const WORKFLOW_SESSION_INSTANCES = `
+WITH LatestTaskVersion AS (
+  SELECT 
+    INSTANCE_ID, 
+    WORKFLOW_ID, 
+    MAX(VERSION_NUMBER) AS LATEST_VERSION 
+  FROM 
+    ${DATABASE}.OPB_TASK_INST 
+  GROUP BY 
+    INSTANCE_ID, 
+    WORKFLOW_ID
+), 
 LatestExprVersion AS (
-SELECT
-	WORKFLOW_ID,
-	CONDITION_ID,
-	MAX(VERSION_NUMBER) AS LATEST_VERSION
-FROM
-	${DATABASE}.OPB_WFLOW_EXPR
-GROUP BY
-	WORKFLOW_ID,
-	CONDITION_ID
-)
-SELECT
-	owd.FROM_INST_ID,
-	owd.TO_INST_ID,
-	owd.CONDITION_ID,
-	oexpr.CONDITION,
-	oti_from.TASK_ID AS FROM_TASK_ID,
-	oti_from.INSTANCE_NAME AS FROM_INST_NAME,
-	oti_from.TASK_TYPE AS FROM_INST_TASK_TYPE,
-	(SELECT OBJECT_TYPE_NAME FROM ${DATABASE}.OPB_OBJECT_TYPE oot WHERE OBJECT_TYPE_ID = OTI_FROM.TASK_TYPE) AS FROM_INST_TASK_TYPE_NAME,
-	oti_to.TASK_ID AS TO_TASK_ID,
-	oti_to.INSTANCE_NAME AS TO_INST_NAME,
-	oti_to.TASK_TYPE AS TO_INST_TASK_TYPE,
-	(SELECT OBJECT_TYPE_NAME FROM ${DATABASE}.OPB_OBJECT_TYPE oot WHERE OBJECT_TYPE_ID = OTI_TO.TASK_TYPE) AS TO_INST_TASK_TYPE_NAME
+  SELECT 
+    WORKFLOW_ID, 
+    CONDITION_ID, 
+    MAX(VERSION_NUMBER) AS LATEST_VERSION 
+  FROM 
+    ${DATABASE}.OPB_WFLOW_EXPR 
+  GROUP BY 
+    WORKFLOW_ID, 
+    CONDITION_ID
+), 
+MaxMappingVersion AS (
+  SELECT 
+    MAPPING_ID, 
+    max(VERSION_NUMBER) LATEST_VERSION 
+  FROM 
+    ${DATABASE}.opb_mapping om 
+  GROUP BY 
+    MAPPING_ID
+), 
+LatestSessionVersion AS (
+  SELECT 
+    SESSION_ID, 
+    MAX(VERSION_NUMBER) AS LATEST_VERSION 
+  FROM 
+    ${DATABASE}.OPB_SESSION 
+  GROUP BY 
+    SESSION_ID
+) 
+SELECT 
+  owd.FROM_INST_ID, 
+  owd.TO_INST_ID, 
+  owd.CONDITION_ID, 
+  oexpr.CONDITION, 
+  oti_from.TASK_ID AS FROM_TASK_ID, 
+  oti_from.INSTANCE_NAME AS FROM_INST_NAME, 
+  oti_from.TASK_TYPE AS FROM_INST_TASK_TYPE, 
+  (
+    SELECT 
+      OBJECT_TYPE_NAME 
+    FROM 
+      ${DATABASE}.OPB_OBJECT_TYPE oot 
+    WHERE 
+      OBJECT_TYPE_ID = OTI_FROM.TASK_TYPE
+  ) AS FROM_INST_TASK_TYPE_NAME, 
+  oti_to.TASK_ID AS TO_TASK_ID, 
+  oti_to.INSTANCE_NAME AS TO_INST_NAME, 
+  oti_to.TASK_TYPE AS TO_INST_TASK_TYPE, 
+  (
+    SELECT 
+      OBJECT_TYPE_NAME 
+    FROM 
+      ${DATABASE}.OPB_OBJECT_TYPE oot 
+    WHERE 
+      OBJECT_TYPE_ID = OTI_TO.TASK_TYPE
+  ) AS TO_INST_TASK_TYPE_NAME, 
+  (
+    SELECT 
+      MAPPING_NAME 
+    FROM 
+      ${DATABASE}.OPB_SESSION os 
+      JOIN ${DATABASE}.OPB_MAPPING om ON os.MAPPING_ID = om.MAPPING_ID 
+      AND om.VERSION_NUMBER = (
+        SELECT 
+          LATEST_VERSION 
+        FROM 
+          MaxMappingVersion 
+        WHERE 
+          MAPPING_ID = os.MAPPING_ID
+      ) 
+    WHERE 
+      os.SESSION_ID = OTI_FROM.TASK_ID 
+      AND os.VERSION_NUMBER = (
+        SELECT 
+          LATEST_VERSION 
+        FROM 
+          LatestSessionVersion 
+        WHERE 
+          SESSION_ID = OTI_FROM.TASK_ID
+      )
+  ) AS FROM_INST_MAPPING_NAME, 
+    (
+    SELECT 
+      os.MAPPING_ID
+    FROM 
+      ${DATABASE}.OPB_SESSION os 
+    WHERE 
+      os.SESSION_ID = OTI_FROM.TASK_ID 
+      AND os.VERSION_NUMBER = (
+        SELECT 
+          LATEST_VERSION 
+        FROM 
+          LatestSessionVersion 
+        WHERE 
+          SESSION_ID = OTI_FROM.TASK_ID
+      )
+  ) AS FROM_INST_MAPPING_ID, 
+  (
+    SELECT 
+      os.MAPPING_ID
+    FROM 
+      ${DATABASE}.OPB_SESSION os     
+    WHERE 
+      SESSION_ID = OTI_TO.TASK_ID 
+      AND os.VERSION_NUMBER = (
+        SELECT 
+          LATEST_VERSION 
+        FROM 
+          LatestSessionVersion 
+        WHERE 
+          SESSION_ID = OTI_TO.TASK_ID
+      )
+  ) AS TO_INST_MAPPING_ID,
+  (
+    SELECT 
+      MAPPING_NAME
+    FROM 
+      ${DATABASE}.OPB_SESSION os
+      JOIN ${DATABASE}.OPB_MAPPING om ON os.MAPPING_ID = om.MAPPING_ID 
+      AND om.VERSION_NUMBER = (
+        SELECT 
+          LATEST_VERSION 
+        FROM 
+          MaxMappingVersion 
+        WHERE 
+          MAPPING_ID = os.MAPPING_ID
+      )      
+    WHERE 
+      SESSION_ID = OTI_TO.TASK_ID 
+      AND os.VERSION_NUMBER = (
+        SELECT 
+          LATEST_VERSION 
+        FROM 
+          LatestSessionVersion 
+        WHERE 
+          SESSION_ID = OTI_TO.TASK_ID
+      )
+  ) AS TO_INST_MAPPING_NAME
 FROM
 	${DATABASE}.OPB_WFLOW_DEP owd
 JOIN ${DATABASE}.OPB_TASK_INST oti_from
