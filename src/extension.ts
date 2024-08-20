@@ -378,6 +378,10 @@ const generateDAGCodeFromTasks = async (
           );
         break;
       case "decision":
+        const candidate_tasks = tasks.filter(
+          (cnddt) => cnddt.fromInstId === task.toInstId
+        );
+        console.log(candidate_tasks);
         builder
           .addTask(
             task.toInstName.toLocaleLowerCase(),
@@ -385,9 +389,9 @@ const generateDAGCodeFromTasks = async (
             "",
             "",
             "",
-            `${task.condition}`,
-            "",
-            "",
+            `${candidate_tasks[0].condition}`,
+            `${candidate_tasks[0].toInstName.toLocaleLowerCase()}`,
+            `${candidate_tasks[1].toInstName.toLocaleLowerCase()}`,
             ""
           )
           .addDependency(
