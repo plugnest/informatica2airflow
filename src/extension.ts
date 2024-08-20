@@ -12,6 +12,9 @@ import {
   EVENT_WAIT_FILE,
   INSTANCES,
   INSTANCES_BAK,
+  SESSION_CONNECTION,
+  SESSION_WIDGET,
+  SESSION_WRITERS_READERS,
   SUB_WF,
   WORKFLOW_SESSION_INSTANCES,
 } from "./queries";
@@ -39,6 +42,36 @@ interface Folder {
 
 interface Workflow {
   name: string;
+}
+
+interface SessionWidgetInfo {
+  SESSION_ID: number;
+  SESS_WIDG_INST_ID: number;
+  WIDGET_ID: number;
+  WIDGET_TYPE: number;
+  INSTANCE_ID: number;
+  INSTANCE_NAME: string;
+  WIDGET_TYPE_NAME: string;
+}
+
+interface SessionConnectionInfo {
+  SESSION_ID: number;
+  SESS_WIDG_INST_ID: number;
+  REF_OBJECT_ID: number;
+  REF_OBJECT_TYPE: number;
+  REF_OBJECT_SUBTYP: number;
+  OBJECT_NAME: string;
+  USER_NAME: string;
+  ATTR_ID: number;
+  ATTR_VALUE: string;
+}
+
+interface WritersReadersInfo {
+  SESSION_ID: number;
+  SESS_WIDG_INST_ID: number;
+  OBJECT_TYPE: number;
+  OBJECT_SUBTYPE: number;
+  OBJECT_NAME: string;
 }
 
 let newConnection: ConnectionView;
@@ -190,7 +223,7 @@ export function activate(context: vscode.ExtensionContext) {
           // TODO: Try to use the query from task inst run
           return;
         }
-        const sortedTasks = topoSort(taskNodes as TaskNode[]);
+        const sortedTasks = topoSort(taskNodes!);
 
         if (typeof sortedTasks === "string") {
           console.error(sortedTasks);
@@ -395,6 +428,150 @@ const generateDAGCodeFromTasks = async (
             task.toInstName.toLocaleLowerCase()
           );
         break;
+      case "session":
+        const [
+          sessionWidgetInfoRaw,
+          sessionConnectionInfoRaw,
+          writersReadersInfoRaw,
+        ]: [
+          SessionWidgetInfo[],
+          SessionConnectionInfo[],
+          WritersReadersInfo[]
+        ] = await Promise.all([
+          getSessionWidgetInfo(task.toTaskId),
+          getSessionConnectionInfo(task.toTaskId),
+          getWritersReadersInfo(task.toTaskId),
+        ]);
+
+        const sessionWidgetInfo: SessionWidgetInfo[] = sessionWidgetInfoRaw.map(
+          (item: any) => ({
+            SESSION_ID: item[0] ?? 0,
+            SESS_WIDG_INST_ID: item[1] ?? 0,
+            WIDGET_ID: item[2] ?? 0,
+            WIDGET_TYPE: item[3] ?? 0,
+            INSTANCE_ID: item[4] ?? 0,
+            INSTANCE_NAME: item[5] ?? "",
+            WIDGET_TYPE_NAME: item[6] ?? "",
+          })
+        );
+
+        const sessionConnectionInfo: SessionConnectionInfo[] =
+          sessionConnectionInfoRaw.map((item: any) => ({
+            SESSION_ID: item[0] ?? 0,
+            SESS_WIDG_INST_ID: item[1] ?? 0,
+            REF_OBJECT_ID: item[2] ?? 0,
+            REF_OBJECT_TYPE: item[3] ?? 0,
+            REF_OBJECT_SUBTYP: item[4] ?? 0,
+            OBJECT_NAME: item[5] ?? "",
+            USER_NAME: item[6] ?? "",
+            ATTR_ID: item[7] ?? 0,
+            ATTR_VALUE: item[8] ?? "",
+          }));
+
+        const writersReadersInfo: WritersReadersInfo[] =
+          writersReadersInfoRaw.map((item: any) => ({
+            SESSION_ID: item[0] ?? 0,
+            SESS_WIDG_INST_ID: item[1] ?? 0,
+            OBJECT_TYPE: item[2] ?? 0,
+            OBJECT_SUBTYPE: item[3] ?? 0,
+            OBJECT_NAME: item[4] ?? "",
+          }));
+
+        console.log(
+          sessionConnectionInfo,
+          sessionWidgetInfo,
+          writersReadersInfo
+        );
+
+        const fileReadersWriters = writersReadersInfo.filter((mapping) =>
+          mapping.OBJECT_NAME.startsWith("File")
+        );
+
+        let tptOperator = "";
+        fileReadersWriters.forEach((mapping) => {
+          sessionConnectionInfo.forEach((connection) => {
+            if (
+              mapping.SESS_WIDG_INST_ID === connection.SESS_WIDG_INST_ID &&
+              connection.OBJECT_NAME === ""
+            ) {
+              console.table(mapping);
+              console.table(connection);
+              tptOperator =
+                mapping.OBJECT_NAME === "File Reader"
+                  ? "TPTLoadOperator"
+                  : "TPTExportOperator";
+            }
+          });
+        });
+        if (tptOperator !== "") {
+          builder.addImport(
+            `from banglalink.airflow.operators.teradata import ${tptOperator}`
+          );
+          tptOperator === "TPTLoadOperator"
+            ? builder.addTask(
+                task.toInstName.toLocaleLowerCase(),
+                task.toInstTaskTypeName.toLocaleLowerCase(),
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                tptOperator,
+                {
+                  file_dir: "",
+                  file_name_prefix: "",
+                  file_date_format: "",
+                  file_name_suffix: "",
+                  file_day_offset: "",
+                  db_name: "",
+                  src_table_name: "",
+                }
+              )
+            : builder.addTask(
+                task.toInstName.toLocaleLowerCase(),
+                task.toInstTaskTypeName.toLocaleLowerCase(),
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                tptOperator,
+                {
+                  job_name: "",
+                  directory_path: "",
+                  output_file: "",
+                  sql: "",
+                  delimiter: "",
+                  header: "",
+                }
+              );
+        } else {
+          builder.addImport(
+            "from airflow.providers.teradata.operators.bteq import BteqOperator"
+          );
+          builder.addTask(
+            task.toInstName.toLocaleLowerCase(),
+            task.toInstTaskTypeName.toLocaleLowerCase(),
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "BteqOperator",
+            {
+              ttu_conn_id: "teradata_ifx_db_ttu_up_etl01_conn",
+              bteq: "",
+            }
+          );
+        }
+        builder.addDependency(
+          task.fromInstName.toLocaleLowerCase(),
+          task.toInstName.toLocaleLowerCase()
+        );
+        break;
       default:
         builder
           .addImport("from airflow.operators.empty import EmptyOperator")
@@ -439,6 +616,78 @@ const getEventWaitFileName = async (
     });
 
     console.log(result);
+    return result?.rows || [];
+  } catch (err) {
+    console.error(err);
+    vscode.window.showErrorMessage("Error executing query");
+  } finally {
+    if (connection) {
+      await dbConnection.closeConnection(connection);
+    }
+  }
+};
+
+const getSessionConnectionInfo = async (session_id: number): Promise<any> => {
+  let { username, password, connectionString } = newConnection;
+  const creds = new ConnectionCreds(username, password, connectionString);
+  const dbConnection = new Connection(SupportedDatabase.Oracle, creds);
+  let connection;
+  try {
+    connection = await dbConnection.getConnection();
+
+    const result = await connection.execute<any>(SESSION_CONNECTION, {
+      SESSION_ID: session_id,
+    });
+
+    console.log(session_id, result);
+    return result?.rows || [];
+  } catch (err) {
+    console.error(err);
+    vscode.window.showErrorMessage("Error executing query");
+  } finally {
+    if (connection) {
+      await dbConnection.closeConnection(connection);
+    }
+  }
+};
+
+const getWritersReadersInfo = async (session_id: number): Promise<any> => {
+  let { username, password, connectionString } = newConnection;
+  const creds = new ConnectionCreds(username, password, connectionString);
+  const dbConnection = new Connection(SupportedDatabase.Oracle, creds);
+  let connection;
+  try {
+    connection = await dbConnection.getConnection();
+
+    const result = await connection.execute<any>(SESSION_WRITERS_READERS, {
+      SESSION_ID: session_id,
+    });
+
+    console.log(session_id, result);
+    return result?.rows || [];
+  } catch (err) {
+    console.error(err);
+    vscode.window.showErrorMessage("Error executing query");
+  } finally {
+    if (connection) {
+      await dbConnection.closeConnection(connection);
+    }
+  }
+};
+
+const getSessionWidgetInfo = async (session_id: number): Promise<any> => {
+  let { username, password, connectionString } = newConnection;
+  const creds = new ConnectionCreds(username, password, connectionString);
+  const dbConnection = new Connection(SupportedDatabase.Oracle, creds);
+  let connection;
+  try {
+    connection = await dbConnection.getConnection();
+
+    const result = await connection.execute<any>(SESSION_WIDGET, {
+      SESSION_ID: session_id,
+    });
+
+    console.log(session_id, result);
     return result?.rows || [];
   } catch (err) {
     console.error(err);
