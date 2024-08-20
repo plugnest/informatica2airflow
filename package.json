@@ -1,4 +1,5 @@
 {
+  "publisher": "mr.hasan@banglalink.net",
   "name": "informatica2airflow",
   "displayName": "informatica2airflow",
   "description": "This extension is meant to generate airflow code based on informatica metadata",
