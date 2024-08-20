@@ -1,5 +1,8 @@
 {
   "publisher": "mr.hasan@banglalink.net",
+  "repository": {
+    "url": "https://github.com/rhasanm/informatica2airflow"
+  },
   "name": "informatica2airflow",
   "displayName": "informatica2airflow",
   "description": "This extension is meant to generate airflow code based on informatica metadata",
