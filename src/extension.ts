@@ -18,7 +18,7 @@ import {
 import path from "path";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { TaskNode, topoSort } from "./sorter";
-import { DAGBuilder } from "./dag_builder";
+import { DAGBuilder } from "./dagBuilder";
 
 const envPath = path.resolve(__dirname, "../.env");
 dotenv.config({ path: envPath });
