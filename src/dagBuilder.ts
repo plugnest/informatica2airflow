@@ -130,7 +130,9 @@ export class DAGBuilder {
       dagCode += `${importStatement}\n`;
     });
 
-    dagCode += `\n\ndefault_args = ${JSON.stringify(this.defaultArgs)}\n\n`;
+    dagCode += `\n\ndefault_args = ${JSON.stringify(this.defaultArgs)
+      .replace(/"False"/g, "False")
+      .replace(/"True"/g, "True")}\n\n`;
     dagCode += `@dag(\n`;
     dagCode += `    default_args=default_args,\n`;
     dagCode += `    schedule=None,\n`;
