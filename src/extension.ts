@@ -13,7 +13,9 @@ import {
   INSTANCES,
   INSTANCES_BAK,
   SESSION_CONNECTION,
+  SESSION_FILE_VALS,
   SESSION_WIDGET,
+  SESSION_WIDGET_ATTRIBUTES,
   SESSION_WRITERS_READERS,
   SUB_WF,
   WORKFLOW_SESSION_INSTANCES,
@@ -488,6 +490,7 @@ const generateDAGCodeFromTasks = async (
         );
 
         let tptOperator = "";
+        let dbName = "";
         fileReadersWriters.forEach((mapping) => {
           sessionConnectionInfo.forEach((connection) => {
             if (
@@ -503,7 +506,12 @@ const generateDAGCodeFromTasks = async (
             }
           });
         });
+        const widgetAttrs = await getSessionWidgetAttrs(task.toTaskId);
+
         if (tptOperator !== "") {
+          // TODO: INTERFACE
+          const fileValues = await getSessionFileVals(task.toTaskId, task.toInstId);
+
           builder.addImport(
             `from banglalink.airflow.operators.teradata import ${tptOperator}`
           );
@@ -519,8 +527,8 @@ const generateDAGCodeFromTasks = async (
                 "",
                 tptOperator,
                 {
-                  file_dir: "",
-                  file_name_prefix: "",
+                  file_dir: `${fileValues[1]}`,
+                  file_name_prefix: `${fileValues[0]}`,
                   file_date_format: "",
                   file_name_suffix: "",
                   file_day_offset: "",
@@ -539,12 +547,12 @@ const generateDAGCodeFromTasks = async (
                 "",
                 tptOperator,
                 {
-                  job_name: "",
-                  directory_path: "",
-                  output_file: "",
+                  job_name: workflowName.toLocaleLowerCase(),
+                  directory_path: `${fileValues[1]}`,
+                  output_file: `${fileValues[0]}`,
                   sql: "",
-                  delimiter: "",
-                  header: "",
+                  delimiter: ",",
+                  header: "None",
                 }
               );
         } else {
@@ -718,6 +726,55 @@ const getCommands = async (
     });
 
     console.log(result);
+    return result?.rows || [];
+  } catch (err) {
+    console.error(err);
+    vscode.window.showErrorMessage("Error executing query");
+  } finally {
+    if (connection) {
+      await dbConnection.closeConnection(connection);
+    }
+  }
+};
+
+const getSessionWidgetAttrs = async (session_id: number): Promise<any> => {
+  let { username, password, connectionString } = newConnection;
+  const creds = new ConnectionCreds(username, password, connectionString);
+  const dbConnection = new Connection(SupportedDatabase.Oracle, creds);
+  let connection;
+  try {
+    connection = await dbConnection.getConnection();
+
+    const result = await connection.execute<any>(SESSION_WIDGET_ATTRIBUTES, {
+      SESSION_ID: session_id,
+    });
+
+    console.log(session_id, result);
+    return result?.rows || [];
+  } catch (err) {
+    console.error(err);
+    vscode.window.showErrorMessage("Error executing query");
+  } finally {
+    if (connection) {
+      await dbConnection.closeConnection(connection);
+    }
+  }
+};
+
+const getSessionFileVals = async (session_id: number, widget_id: number): Promise<any> => {
+  let { username, password, connectionString } = newConnection;
+  const creds = new ConnectionCreds(username, password, connectionString);
+  const dbConnection = new Connection(SupportedDatabase.Oracle, creds);
+  let connection;
+  try {
+    connection = await dbConnection.getConnection();
+
+    const result = await connection.execute<any>(SESSION_FILE_VALS, {
+      SESSION_ID: session_id,
+      WIDGET_ID: widget_id
+    });
+
+    console.log(session_id, result);
     return result?.rows || [];
   } catch (err) {
     console.error(err);
