@@ -506,11 +506,38 @@ const generateDAGCodeFromTasks = async (
             }
           });
         });
-        const widgetAttrs = await getSessionWidgetAttrs(task.toTaskId);
+        interface SwidgetAttrInfo {
+          SESS_WIDG_INST_ID: number;
+          ATTR_ID: number;
+          ATTR_VALUE: string;
+        }
+
+        const swidgetAttrInfoRaw = await getSessionWidgetAttrs(task.toTaskId);
+        const swidgetAttrInfo: SwidgetAttrInfo[] = swidgetAttrInfoRaw.map(
+          (item: [number, number, string]) => ({
+            SESS_WIDG_INST_ID: item[0],
+            ATTR_ID: item[1],
+            ATTR_VALUE: item[2],
+          })
+        );
+        const sourceWidgetInst = sessionWidgetInfo.filter(
+          (widget) => widget.WIDGET_TYPE_NAME === "Source Definition"
+        );
+        const targetWidgetInst = sessionWidgetInfo.filter(
+          (widget) => widget.WIDGET_TYPE_NAME === "Target Definition"
+        );
+        const sqWidgetInst = sessionWidgetInfo.filter(
+          (widget) => widget.WIDGET_TYPE_NAME === "Source Qualifier"
+        );
 
         if (tptOperator !== "") {
           // TODO: INTERFACE
-          const fileValues = await getSessionFileVals(task.toTaskId, task.toInstId);
+          const fileValues = await getSessionFileVals(
+            task.toTaskId,
+            tptOperator === "TPTLoadOperator"
+              ? sourceWidgetInst[0].SESS_WIDG_INST_ID
+              : targetWidgetInst[0].SESS_WIDG_INST_ID
+          );
 
           builder.addImport(
             `from banglalink.airflow.operators.teradata import ${tptOperator}`
@@ -527,13 +554,13 @@ const generateDAGCodeFromTasks = async (
                 "",
                 tptOperator,
                 {
-                  file_dir: `${fileValues[1]}`,
-                  file_name_prefix: `${fileValues[0]}`,
-                  file_date_format: "",
-                  file_name_suffix: "",
-                  file_day_offset: "",
-                  db_name: "",
-                  src_table_name: "",
+                  file_dir: `"${fileValues[0][1]}"`,
+                  file_pattern: `""`,
+                  file_path: `"${fileValues[0][0]}"`,
+                  db_name: `""`,
+                  table_name: `""`,
+                  schema_name: `""`,
+                  schema_definition: `""`,
                 }
               )
             : builder.addTask(
@@ -547,15 +574,35 @@ const generateDAGCodeFromTasks = async (
                 "",
                 tptOperator,
                 {
-                  job_name: workflowName.toLocaleLowerCase(),
-                  directory_path: `${fileValues[1]}`,
-                  output_file: `${fileValues[0]}`,
-                  sql: "",
-                  delimiter: ",",
-                  header: "None",
+                  job_name: `"${workflowName.toLocaleLowerCase()}"`,
+                  directory_path: `"${fileValues[0][1]}"`,
+                  output_file: `"${fileValues[0][0]}"`,
+                  sql: `""`,
+                  delimiter: `","`,
+                  header: `"None"`,
                 }
               );
         } else {
+          const sourceSQL = swidgetAttrInfo
+            .filter(
+              (attr) =>
+                attr.SESS_WIDG_INST_ID === sqWidgetInst[0].SESS_WIDG_INST_ID
+            )
+            ?.reduce(
+              (preSql, newSql) =>
+                preSql + "\n\t\t" + `${newSql.ATTR_VALUE ?? ""}`,
+              ""
+            );
+          const targetSQL = swidgetAttrInfo
+            .filter(
+              (attr) =>
+                attr.SESS_WIDG_INST_ID === targetWidgetInst[0].SESS_WIDG_INST_ID
+            )
+            ?.reduce(
+              (preSql, newSql) =>
+                preSql + "\n\t\t" + `${newSql.ATTR_VALUE ?? ""}`,
+              ""
+            );
           builder.addImport(
             "from airflow.providers.teradata.operators.bteq import BteqOperator"
           );
@@ -570,8 +617,8 @@ const generateDAGCodeFromTasks = async (
             "",
             "BteqOperator",
             {
-              ttu_conn_id: "teradata_ifx_db_ttu_up_etl01_conn",
-              bteq: "",
+              ttu_conn_id: `"teradata_ifx_db_ttu_up_etl01_conn"`,
+              bteq: `"""${sourceSQL ?? ""}\n\n\t\t${targetSQL ?? ""}"""`,
             }
           );
         }
@@ -761,7 +808,10 @@ const getSessionWidgetAttrs = async (session_id: number): Promise<any> => {
   }
 };
 
-const getSessionFileVals = async (session_id: number, widget_id: number): Promise<any> => {
+const getSessionFileVals = async (
+  session_id: number,
+  widget_id: number
+): Promise<any> => {
   let { username, password, connectionString } = newConnection;
   const creds = new ConnectionCreds(username, password, connectionString);
   const dbConnection = new Connection(SupportedDatabase.Oracle, creds);
@@ -771,7 +821,7 @@ const getSessionFileVals = async (session_id: number, widget_id: number): Promis
 
     const result = await connection.execute<any>(SESSION_FILE_VALS, {
       SESSION_ID: session_id,
-      WIDGET_ID: widget_id
+      WIDGET_ID: widget_id,
     });
 
     console.log(session_id, result);

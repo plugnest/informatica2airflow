@@ -177,7 +177,7 @@ export class DAGBuilder {
           Object.keys(task.operatorParams).length > 0
         ) {
           Object.keys(task.operatorParams).forEach((param) => {
-            dagCode += `        ${param}='${task.operatorParams[param]}',\n`;
+            dagCode += `        ${param}=${task.operatorParams[param]},\n`;
           });
         }
         dagCode += `    )\n`;
