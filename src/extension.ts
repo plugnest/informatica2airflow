@@ -330,7 +330,7 @@ const generateDAGCodeFromTasks = async (
   subjectAreaName: string
 ) => {
   let builder = new DAGBuilder()
-    .setDagId(workflowName.toLocaleLowerCase())
+    .setDagId(workflowName.toLocaleLowerCase().replace("wf_", ""))
     .setDefaultArgs({
       owner: "",
       email: [`${process.env.EMAIL_ADDRESS}`],
@@ -571,12 +571,26 @@ const generateDAGCodeFromTasks = async (
                 file_pattern: `""`,
                 file_path: `"${fileValues[0][0]}"`,
                 db_name: `""`,
-                table_name: `""`,
-                schema_name: `"${targetWidgetInst[0].INSTANCE_NAME}"`,
+                table_name: `"${targetWidgetInst[0].INSTANCE_NAME}"`,
+                schema_name: `"${targetWidgetInst[0].INSTANCE_NAME}_SCHEMA"`,
                 schema_definition: schemaVariableName,
               }
             );
           } else {
+            const sourceSQL = swidgetAttrInfo
+              .filter(
+                (attr) =>
+                  attr.SESS_WIDG_INST_ID === sqWidgetInst[0].SESS_WIDG_INST_ID
+              )
+              ?.reduce(
+                (preSql, newSql) =>
+                  preSql + "\n" + `${newSql.ATTR_VALUE ?? ""}`,
+                ""
+              );
+
+            const sqlVariableName = `${task.toInstName.toUpperCase()}_SQL`;
+            builder.addVarialbe(sqlVariableName, `"""${sourceSQL};\n"""`);
+
             builder.addTask(
               task.toInstName.toLocaleLowerCase(),
               task.toInstTaskTypeName.toLocaleLowerCase(),
@@ -591,7 +605,7 @@ const generateDAGCodeFromTasks = async (
                 job_name: `"${workflowName.toLocaleLowerCase()}"`,
                 directory_path: `"${fileValues[0][1]}"`,
                 output_file: `"${fileValues[0][0]}"`,
-                sql: `""`,
+                sql: sqlVariableName,
                 delimiter: `","`,
                 header: `"None"`,
               }
@@ -617,8 +631,14 @@ const generateDAGCodeFromTasks = async (
               ""
             );
           const bteqVariableName = task.toInstName.toUpperCase() + "_BTEQ";
-          const bteqVariableValue = `"""${sourceSQL ?? ""}\n\n${
-            targetSQL ?? ""
+          const bteqVariableValue = `"""${
+            sourceSQL !== ""
+              ? sourceSQL + ";\n.IF ERRORCODE <> 0 THEN .QUIT 0301;\n.QUIT 0;"
+              : ""
+          }\n\n${
+            targetSQL !== "\n"
+              ? targetSQL + ";\n.IF ERRORCODE <> 0 THEN .QUIT 0301;\n.QUIT 0;"
+              : ""
           }\n"""`;
 
           builder.addVarialbe(bteqVariableName, bteqVariableValue);
