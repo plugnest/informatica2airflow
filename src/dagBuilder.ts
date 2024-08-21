@@ -196,12 +196,12 @@ export class DAGBuilder {
       }
     });
 
-    this.variables.forEach((variable) => {
-      dagCode += `\n${variable.key}=${variable.value}\n`;
-    });
-
     this.dependencies.forEach(([upstreamTaskId, downstreamTaskId]) => {
       dagCode += `    task_${upstreamTaskId.toLocaleLowerCase()} >> task_${downstreamTaskId.toLocaleLowerCase()}\n`;
+    });
+
+    this.variables.forEach((variable) => {
+      dagCode += `\n${variable.key}=${variable.value}\n`;
     });
 
     dagCode += `\n${this.dagId}()\n`;
