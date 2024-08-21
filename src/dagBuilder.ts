@@ -13,6 +13,11 @@ export interface Task {
   operatorParams?: any;
 }
 
+interface Variables {
+  key: string;
+  value: string;
+}
+
 export class DAGBuilder {
   private dagId: string | null = null;
   private defaultArgs: { [key: string]: any } | null = null;
@@ -28,6 +33,7 @@ export class DAGBuilder {
   private maxActiveRuns: number | null = null;
   private catchup: string | null = null;
   private dependencies: [string, string][] = [];
+  private variables: Variables[] = [];
 
   constructor() {
     this.addImport("import pendulum");
@@ -46,6 +52,11 @@ export class DAGBuilder {
 
   setParams(params: { [key: string]: any }): this {
     this.params = params;
+    return this;
+  }
+
+  addVarialbe(key: string, value: string): this {
+    this.variables.push({ key, value });
     return this;
   }
 
@@ -183,6 +194,10 @@ export class DAGBuilder {
         dagCode += `    )\n`;
         dagCode += `    \n\n`;
       }
+    });
+
+    this.variables.forEach((variable) => {
+      dagCode += `\n${variable.key}=${variable.value}\n`;
     });
 
     this.dependencies.forEach(([upstreamTaskId, downstreamTaskId]) => {

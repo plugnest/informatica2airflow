@@ -18,6 +18,7 @@ import {
   SESSION_WIDGET_ATTRIBUTES,
   SESSION_WRITERS_READERS,
   SUB_WF,
+  WIDGET_SOURCE_FILED,
   WORKFLOW_SESSION_INSTANCES,
 } from "./queries";
 import path from "path";
@@ -531,6 +532,9 @@ const generateDAGCodeFromTasks = async (
         );
 
         if (tptOperator !== "") {
+          const sourceField = await getWidgetSourceFields(
+            sourceWidgetInst[0].WIDGET_ID
+          );
           // TODO: INTERFACE
           const fileValues = await getSessionFileVals(
             task.toTaskId,
@@ -538,6 +542,14 @@ const generateDAGCodeFromTasks = async (
               ? sourceWidgetInst[0].SESS_WIDG_INST_ID
               : targetWidgetInst[0].SESS_WIDG_INST_ID
           );
+
+          const schemaVariableName =
+            task.toInstName.toUpperCase() + "_SCHEMA_DEFINITION";
+          const variableValue = `{${sourceField.map(
+            (field: [string, string]) => `"${field[0]}": "VARCHAR(${field[1]})"`
+          )}}`;
+
+          builder.addVarialbe(schemaVariableName, variableValue);
 
           builder.addImport(
             `from banglalink.airflow.operators.teradata import ${tptOperator}`
@@ -559,8 +571,8 @@ const generateDAGCodeFromTasks = async (
                   file_path: `"${fileValues[0][0]}"`,
                   db_name: `""`,
                   table_name: `""`,
-                  schema_name: `""`,
-                  schema_definition: `""`,
+                  schema_name: `"${targetWidgetInst[0].INSTANCE_NAME}"`,
+                  schema_definition: schemaVariableName,
                 }
               )
             : builder.addTask(
@@ -589,8 +601,7 @@ const generateDAGCodeFromTasks = async (
                 attr.SESS_WIDG_INST_ID === sqWidgetInst[0].SESS_WIDG_INST_ID
             )
             ?.reduce(
-              (preSql, newSql) =>
-                preSql + "\n\t\t" + `${newSql.ATTR_VALUE ?? ""}`,
+              (preSql, newSql) => preSql + "\n" + `${newSql.ATTR_VALUE ?? ""}`,
               ""
             );
           const targetSQL = swidgetAttrInfo
@@ -599,10 +610,16 @@ const generateDAGCodeFromTasks = async (
                 attr.SESS_WIDG_INST_ID === targetWidgetInst[0].SESS_WIDG_INST_ID
             )
             ?.reduce(
-              (preSql, newSql) =>
-                preSql + "\n\t\t" + `${newSql.ATTR_VALUE ?? ""}`,
+              (preSql, newSql) => preSql + "\n" + `${newSql.ATTR_VALUE ?? ""}`,
               ""
             );
+          const bteqVariableName = task.toInstName.toUpperCase() + "_BTEQ";
+          const bteqVariableValue = `"""${sourceSQL ?? ""}\n\n${
+            targetSQL ?? ""
+          }\n"""`;
+
+          builder.addVarialbe(bteqVariableName, bteqVariableValue);
+
           builder.addImport(
             "from airflow.providers.teradata.operators.bteq import BteqOperator"
           );
@@ -618,7 +635,7 @@ const generateDAGCodeFromTasks = async (
             "BteqOperator",
             {
               ttu_conn_id: `"teradata_ifx_db_ttu_up_etl01_conn"`,
-              bteq: `"""${sourceSQL ?? ""}\n\n\t\t${targetSQL ?? ""}"""`,
+              bteq: bteqVariableName,
             }
           );
         }
@@ -797,6 +814,30 @@ const getSessionWidgetAttrs = async (session_id: number): Promise<any> => {
     });
 
     console.log(session_id, result);
+    return result?.rows || [];
+  } catch (err) {
+    console.error(err);
+    vscode.window.showErrorMessage("Error executing query");
+  } finally {
+    if (connection) {
+      await dbConnection.closeConnection(connection);
+    }
+  }
+};
+
+const getWidgetSourceFields = async (srcId: number): Promise<any> => {
+  let { username, password, connectionString } = newConnection;
+  const creds = new ConnectionCreds(username, password, connectionString);
+  const dbConnection = new Connection(SupportedDatabase.Oracle, creds);
+  let connection;
+  try {
+    connection = await dbConnection.getConnection();
+
+    const result = await connection.execute<any>(WIDGET_SOURCE_FILED, {
+      SRC_ID: srcId,
+    });
+
+    console.log(srcId, result);
     return result?.rows || [];
   } catch (err) {
     console.error(err);
