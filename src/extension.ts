@@ -543,57 +543,60 @@ const generateDAGCodeFromTasks = async (
               : targetWidgetInst[0].SESS_WIDG_INST_ID
           );
 
-          const schemaVariableName =
-            task.toInstName.toUpperCase() + "_SCHEMA_DEFINITION";
-          const variableValue = `{${sourceField.map(
-            (field: [string, string]) => `"${field[0]}": "VARCHAR(${field[1]})"`
-          )}}`;
-
-          builder.addVarialbe(schemaVariableName, variableValue);
-
           builder.addImport(
             `from banglalink.airflow.operators.teradata import ${tptOperator}`
           );
-          tptOperator === "TPTLoadOperator"
-            ? builder.addTask(
-                task.toInstName.toLocaleLowerCase(),
-                task.toInstTaskTypeName.toLocaleLowerCase(),
-                "",
-                "",
-                "",
-                "",
-                "",
-                "",
-                tptOperator,
-                {
-                  file_dir: `"${fileValues[0][1]}"`,
-                  file_pattern: `""`,
-                  file_path: `"${fileValues[0][0]}"`,
-                  db_name: `""`,
-                  table_name: `""`,
-                  schema_name: `"${targetWidgetInst[0].INSTANCE_NAME}"`,
-                  schema_definition: schemaVariableName,
-                }
-              )
-            : builder.addTask(
-                task.toInstName.toLocaleLowerCase(),
-                task.toInstTaskTypeName.toLocaleLowerCase(),
-                "",
-                "",
-                "",
-                "",
-                "",
-                "",
-                tptOperator,
-                {
-                  job_name: `"${workflowName.toLocaleLowerCase()}"`,
-                  directory_path: `"${fileValues[0][1]}"`,
-                  output_file: `"${fileValues[0][0]}"`,
-                  sql: `""`,
-                  delimiter: `","`,
-                  header: `"None"`,
-                }
-              );
+          if (tptOperator === "TPTLoadOperator") {
+            const schemaVariableName =
+              task.toInstName.toUpperCase() + "_SCHEMA_DEFINITION";
+            const variableValue = `{${sourceField.map(
+              (field: [string, string]) =>
+                `"${field[0]}": "VARCHAR(${field[1]})"`
+            )}}`;
+
+            builder.addVarialbe(schemaVariableName, variableValue);
+
+            builder.addTask(
+              task.toInstName.toLocaleLowerCase(),
+              task.toInstTaskTypeName.toLocaleLowerCase(),
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              tptOperator,
+              {
+                file_dir: `"${fileValues[0][1]}"`,
+                file_pattern: `""`,
+                file_path: `"${fileValues[0][0]}"`,
+                db_name: `""`,
+                table_name: `""`,
+                schema_name: `"${targetWidgetInst[0].INSTANCE_NAME}"`,
+                schema_definition: schemaVariableName,
+              }
+            );
+          } else {
+            builder.addTask(
+              task.toInstName.toLocaleLowerCase(),
+              task.toInstTaskTypeName.toLocaleLowerCase(),
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              tptOperator,
+              {
+                job_name: `"${workflowName.toLocaleLowerCase()}"`,
+                directory_path: `"${fileValues[0][1]}"`,
+                output_file: `"${fileValues[0][0]}"`,
+                sql: `""`,
+                delimiter: `","`,
+                header: `"None"`,
+              }
+            );
+          }
         } else {
           const sourceSQL = swidgetAttrInfo
             .filter(
