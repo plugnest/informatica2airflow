@@ -547,6 +547,8 @@ const generateDAGCodeFromTasks = async (
             `from banglalink.airflow.operators.teradata import ${tptOperator}`
           );
           if (tptOperator === "TPTLoadOperator") {
+            const connectionInfo = sessionConnectionInfo.filter(info => info.SESS_WIDG_INST_ID === targetWidgetInst[0].SESS_WIDG_INST_ID);
+            const dbName = connectionInfo[1].ATTR_VALUE;
             const schemaVariableName =
               task.toInstName.toUpperCase() + "_SCHEMA_DEFINITION";
             const variableValue = `{${sourceField.map(
@@ -570,7 +572,7 @@ const generateDAGCodeFromTasks = async (
                 file_dir: `"${fileValues[0][1]}"`,
                 file_pattern: `""`,
                 file_path: `"${fileValues[0][0]}"`,
-                db_name: `""`,
+                db_name: `"${dbName}"`,
                 table_name: `"${targetWidgetInst[0].INSTANCE_NAME}"`,
                 schema_name: `"${targetWidgetInst[0].INSTANCE_NAME}_SCHEMA"`,
                 schema_definition: schemaVariableName,
