@@ -548,7 +548,7 @@ const generateDAGCodeFromTasks = async (
           );
           if (tptOperator === "TPTLoadOperator") {
             const connectionInfo = sessionConnectionInfo.filter(info => info.SESS_WIDG_INST_ID === targetWidgetInst[0].SESS_WIDG_INST_ID);
-            const dbName = connectionInfo[1].ATTR_VALUE;
+            const dbName = connectionInfo[0].ATTR_VALUE === "Teradata" ? connectionInfo[1].ATTR_VALUE : connectionInfo[0].ATTR_VALUE;
             const schemaVariableName =
               task.toInstName.toUpperCase() + "_SCHEMA_DEFINITION";
             const variableValue = `{${sourceField.map(
