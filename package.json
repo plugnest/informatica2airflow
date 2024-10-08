@@ -6,7 +6,7 @@
   "name": "informatica2airflow",
   "displayName": "informatica2airflow",
   "description": "This extension is meant to generate airflow code based on informatica metadata",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "engines": {
     "vscode": "^1.91.0"
   },
