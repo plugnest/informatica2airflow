@@ -19,6 +19,7 @@ import {
   SESSION_WRITERS_READERS,
   SUB_WF,
   WIDGET_SOURCE_FILED,
+  WIDGET_TARGET_FILED,
   WORKFLOW_SESSION_INSTANCES,
 } from "./queries";
 import path from "path";
@@ -535,6 +536,9 @@ const generateDAGCodeFromTasks = async (
           const sourceField = await getWidgetSourceFields(
             sourceWidgetInst[0].WIDGET_ID
           );
+          const targetField = await getWidgetTargetFields(
+            targetWidgetInst[0].WIDGET_ID
+          );
           // TODO: INTERFACE
           const fileValues = await getSessionFileVals(
             task.toTaskId,
@@ -547,16 +551,43 @@ const generateDAGCodeFromTasks = async (
             `from banglalink.airflow.operators.teradata import ${tptOperator}`
           );
           if (tptOperator === "TPTLoadOperator") {
-            const connectionInfo = sessionConnectionInfo.filter(info => info.SESS_WIDG_INST_ID === targetWidgetInst[0].SESS_WIDG_INST_ID);
-            const dbName = connectionInfo[0].ATTR_VALUE === "Teradata" ? connectionInfo[1].ATTR_VALUE : connectionInfo[0].ATTR_VALUE;
+            const connectionInfo = sessionConnectionInfo.filter(
+              (info) =>
+                info.SESS_WIDG_INST_ID === targetWidgetInst[0].SESS_WIDG_INST_ID
+            );
+            const dbName =
+              connectionInfo[0].ATTR_VALUE === "Teradata"
+                ? connectionInfo[1].ATTR_VALUE
+                : connectionInfo[0].ATTR_VALUE;
             const schemaVariableName =
               task.toInstName.toUpperCase() + "_SCHEMA_DEFINITION";
             const variableValue = `{${sourceField.map(
               (field: [string, string]) =>
                 `"${field[0]}": "VARCHAR(${field[1]})"`
             )}}`;
+            const insertStatementArgName =
+              task.toInstName.toUpperCase() + "_INSERT_STMT";
+            const insertStatementArgValue = `"INSERT INTO {db_name}.{table_name} (${targetField
+              .map((field: [string, string]) => `${field[0]}`)
+              .join(", ")}) VALUES (${targetField
+              .map((field: [string, string]) => `:${field[0]}`)
+              .join(", ")});"`;
+            const selectStatementArgName =
+              task.fromInstName.toUpperCase() + "_SELECT_STMT";
+
+            const selectStatementArgValue = `"SELECT ${sourceField
+              .map((field: [string, string]) => `${field[0]}`)
+              .join(", ")}"`;
 
             builder.addVarialbe(schemaVariableName, variableValue);
+            builder.addVarialbe(
+              insertStatementArgName,
+              insertStatementArgValue
+            );
+            builder.addVarialbe(
+              selectStatementArgName,
+              selectStatementArgValue
+            );
 
             builder.addTask(
               task.toInstName.toLocaleLowerCase(),
@@ -576,6 +607,8 @@ const generateDAGCodeFromTasks = async (
                 table_name: `"${targetWidgetInst[0].INSTANCE_NAME}"`,
                 schema_name: `"${targetWidgetInst[0].INSTANCE_NAME}_SCHEMA"`,
                 schema_definition: schemaVariableName,
+                insert_stmt: insertStatementArgName,
+                select_stmt: selectStatementArgName,
               }
             );
           } else {
@@ -863,6 +896,30 @@ const getWidgetSourceFields = async (srcId: number): Promise<any> => {
     });
 
     console.log(srcId, result);
+    return result?.rows || [];
+  } catch (err) {
+    console.error(err);
+    vscode.window.showErrorMessage("Error executing query");
+  } finally {
+    if (connection) {
+      await dbConnection.closeConnection(connection);
+    }
+  }
+};
+
+const getWidgetTargetFields = async (targetId: number): Promise<any> => {
+  let { username, password, connectionString } = newConnection;
+  const creds = new ConnectionCreds(username, password, connectionString);
+  const dbConnection = new Connection(SupportedDatabase.Oracle, creds);
+  let connection;
+  try {
+    connection = await dbConnection.getConnection();
+
+    const result = await connection.execute<any>(WIDGET_TARGET_FILED, {
+      TARGET_ID: targetId,
+    });
+
+    console.log(targetId, result);
     return result?.rows || [];
   } catch (err) {
     console.error(err);
