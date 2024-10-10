@@ -573,7 +573,7 @@ const generateDAGCodeFromTasks = async (
               .map((field: [string, string]) => `:${field[0]}`)
               .join(", ")});"`;
             const selectStatementArgName =
-              task.fromInstName.toUpperCase() + "_SELECT_STMT";
+              task.toInstName.toUpperCase() + "_SELECT_STMT";
 
             const selectStatementArgValue = `"SELECT ${sourceField
               .map((field: [string, string]) => `${field[0]}`)
